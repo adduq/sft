@@ -1,0 +1,15 @@
+# Common IntelliJ Platform excludes
+# Rider
+**/.idea/
+
+# Visual Studio
+*.suo
+*.user
+.vs/
+
+# Common Output Directories
+[Bb]in/
+[Oo]bj/
+
+# Packages
+[Pp]ackages/
