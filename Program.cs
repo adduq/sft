@@ -2,8 +2,8 @@
 using NLog;
 using SocketFileTransfer.Arguments;
 using SocketFileTransfer.Client;
+using SocketFileTransfer.Configuration;
 using SocketFileTransfer.Server;
-using ConfigurationManager = SocketFileTransfer.Configuration.ConfigurationManager;
 
 LogManager.Setup().LoadConfiguration(builder => {
     // Anything higher than logLevel will be written to console
