@@ -2,7 +2,7 @@
 using NLog;
 using SocketFileTransfer.Arguments;
 using SocketFileTransfer.Client;
-using SocketFileTransfer.Receiver;
+using SocketFileTransfer.Server;
 using ConfigurationManager = SocketFileTransfer.Configuration.ConfigurationManager;
 
 LogManager.Setup().LoadConfiguration(builder => {

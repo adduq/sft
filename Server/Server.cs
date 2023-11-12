@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using NLog;
 using SocketFileTransfer.Arguments;
 
-namespace SocketFileTransfer.Receiver;
+namespace SocketFileTransfer.Server;
 
 public class Server
 {
