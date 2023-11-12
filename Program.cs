@@ -3,6 +3,7 @@ using NLog;
 using SocketFileTransfer.Arguments;
 using SocketFileTransfer.Client;
 using SocketFileTransfer.Receiver;
+using ConfigurationManager = SocketFileTransfer.Configuration.ConfigurationManager;
 
 LogManager.Setup().LoadConfiguration(builder => {
     // Anything higher than logLevel will be written to console
@@ -12,7 +13,10 @@ LogManager.Setup().LoadConfiguration(builder => {
     builder.ForLogger().FilterMinLevel(LogLevel.Debug).WriteToFile(fileName: "SocketFileTransfer.log",
         layout: "${longdate}|${level:uppercase=true}|${callsite}|${message}");
 });
-    
+
+// Load configuration
+ConfigurationManager.Instance.Load("config.json");
+
 // Parse command line arguments
 await Parser.Default.ParseArguments<ClientOptions, ServerOptions>(args)
     .MapResult(
