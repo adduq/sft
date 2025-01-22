@@ -1,65 +1,85 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using NLog;
-using SocketFileTransfer.Arguments;
+using SocketFileTransfer.Common;
 
 namespace SocketFileTransfer.Server;
 
 public class Server
 {
     private readonly Logger _logger = LogManager.GetCurrentClassLogger();
-    private readonly Socket _socket;
-    private readonly ServerOptions _options;
-     
-    public Server(ServerOptions options)
-    {
-        _logger.Info("Receiver created");
-        _options = options;
-        _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-    }
-    
-    public async Task RunAsync(CancellationToken cancellationToken = default)
-    {
-        _logger.Info("Receiver started");
-        _socket.Bind(new IPEndPoint(IPAddress.Any, 12345));
-        _socket.Listen(_options.MaxConnections);
 
-        while (!cancellationToken.IsCancellationRequested)
+    public Server()
+    {
+        LastActivityTime = DateTime.Now;
+    }
+
+    public DateTime LastActivityTime { get; private set; }
+
+    public async Task RunAsync(ushort portNumber, string directory, bool runLocally, bool useEncryption)
+    {
+        Socket? server = null;
+
+        // Check if valid directory
+        if (!Directory.Exists(directory))
         {
-            _logger.Info("Waiting for a request...");
-            var client = await _socket.AcceptAsync(cancellationToken);
-            _logger.Info($"Client connected from {client.RemoteEndPoint}.");
-            
-            
-            var key = await KeyExchange(client, cancellationToken);
+            _logger.Error("Directory does not exist, creating...");
+            Directory.CreateDirectory(directory);
+        }
+        Directory.SetCurrentDirectory(directory);
+
+        try
+        {
+            var localAddr = IPAddress.Any;
+            server = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            server.Bind(new IPEndPoint(localAddr, portNumber));
+            server.Listen();
+
+            // Enter the listening loop.
+            while (true)
+            {
+                _logger.Info("Waiting for a transfer request...");
+                var (transferCode, securityCode) = await GetTransferCode(portNumber, runLocally, useEncryption);
+                _logger.Warn($"TRANSFER CODE: {transferCode}");
+                using var client = await server.AcceptAsync();
+                _logger.Info($"Client connected from {client.RemoteEndPoint}.");
+                LastActivityTime = DateTime.Now;
+                var fileReceiver = new FileReceiver(client, securityCode, useEncryption);
+                fileReceiver.NotifyActive += () => LastActivityTime = DateTime.Now;
+                try
+                {
+                    await fileReceiver.BeginFileTransferAsync();
+                }
+                catch (SocketException e)
+                {
+                    _logger.Error($"SocketException: {e.Message}");
+                }
+                catch (Exception e)
+                {
+                    _logger.Error($"Exception: {e}");
+                }
+                client.Close();
+            }
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine("SocketException: {0}", e);
+        }
+        finally
+        {
+            server?.Close();
         }
     }
-    
-    // Elliptic Curve Diffie-Hellman key exchange
-    private async Task<byte[]> KeyExchange(Socket clientSocket, CancellationToken ct)
+
+    private static async Task<(string, byte[])> GetTransferCode(ushort port, bool runLocally, bool useEncryption)
     {
-        // Check if allowed to connect
-        //... maybe read from allowed clients in config
-        
-        var server = ECDiffieHellman.Create();
-        var ourPublicKeyBytes = server.PublicKey.ExportSubjectPublicKeyInfo();
-        var theirPublicKeyBytes = new byte[ourPublicKeyBytes.Length];
+        var ip = runLocally ? IPAddress.Loopback : IPAddress.Parse(
+            (await new HttpClient().GetStringAsync("http://ip-api.com/line?fields=query")).Trim());
 
-        await clientSocket.ReceiveAsync(theirPublicKeyBytes, SocketFlags.None, ct);
-        
-        var client = ECDiffieHellman.Create();
-        client.ImportSubjectPublicKeyInfo(theirPublicKeyBytes, out _);
-        
-        await clientSocket.SendAsync(ourPublicKeyBytes, SocketFlags.None, ct);
-        
-        return server.DeriveKeyMaterial(client.PublicKey);
-    }
+        var ipToInt = BitConverter.ToUInt32(ip.GetAddressBytes());
 
+        var details = new ConnectionDetails(ipToInt, port, useEncryption);
 
-    public async Task StopAsync()
-    {
-        _logger.Info("Receiver stopped");
-        await _socket.DisconnectAsync(true);
+        return (details.ToBase64String().Replace("=", ""), details.SecurityCode);
     }
 }
